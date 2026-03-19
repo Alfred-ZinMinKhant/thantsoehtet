@@ -295,8 +295,17 @@
     TOUCH_ROTATE:3, TOUCH_PAN:4, TOUCH_DOLLY_PAN:5, TOUCH_DOLLY_ROTATE:6 };
 
   THREE.OrbitControls = function (object, domElement) {
-    // Mixin EventDispatcher first so dispatchEvent is available everywhere
-    Object.assign(this, THREE.EventDispatcher.prototype);
+    // Ensure EventDispatcher methods are available (bind directly)
+    if (THREE.EventDispatcher && THREE.EventDispatcher.prototype) {
+      const __ed = THREE.EventDispatcher.prototype;
+      this.addEventListener = __ed.addEventListener.bind(this);
+      this.removeEventListener = __ed.removeEventListener.bind(this);
+      this.dispatchEvent = __ed.dispatchEvent.bind(this);
+    } else {
+      this.addEventListener = function(){};
+      this.removeEventListener = function(){};
+      this.dispatchEvent = function(){};
+    }
     if (domElement === undefined) console.warn('THREE.OrbitControls: The second parameter "domElement" is now mandatory.');
     if (domElement === document) console.error('THREE.OrbitControls: "document" should not be used as the target "domElement". Please use "renderer.domElement" instead.');
     this.object = object;
