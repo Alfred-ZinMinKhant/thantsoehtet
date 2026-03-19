@@ -773,8 +773,18 @@
   pmremGenerator.compileEquirectangularShader();
 
   function buildEnvStudio() {
-    const rt = pmremGenerator.fromScene(new THREE.RoomEnvironment());
-    return rt.texture;
+    const s = new THREE.Scene();
+    s.background = new THREE.Color(0x303050);
+    s.add(new THREE.AmbientLight(0xffffff, 1.5));
+    const top = new THREE.DirectionalLight(0xfff6e0, 3.0);
+    top.position.set(0, 5, 0); s.add(top);
+    const front = new THREE.DirectionalLight(0xffeedd, 2.0);
+    front.position.set(5, 3, 5); s.add(front);
+    const fill = new THREE.DirectionalLight(0x4488ff, 1.2);
+    fill.position.set(-5, 2, -3); s.add(fill);
+    const rim = new THREE.DirectionalLight(0xffc080, 0.8);
+    rim.position.set(0, 2, -5); s.add(rim);
+    return pmremGenerator.fromScene(s).texture;
   }
 
   scene.environment = buildEnvStudio();
