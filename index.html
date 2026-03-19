@@ -295,6 +295,8 @@
     TOUCH_ROTATE:3, TOUCH_PAN:4, TOUCH_DOLLY_PAN:5, TOUCH_DOLLY_ROTATE:6 };
 
   THREE.OrbitControls = function (object, domElement) {
+    // Mixin EventDispatcher first so dispatchEvent is available everywhere
+    Object.assign(this, THREE.EventDispatcher.prototype);
     if (domElement === undefined) console.warn('THREE.OrbitControls: The second parameter "domElement" is now mandatory.');
     if (domElement === document) console.error('THREE.OrbitControls: "document" should not be used as the target "domElement". Please use "renderer.domElement" instead.');
     this.object = object;
@@ -660,8 +662,6 @@
     scope.domElement.addEventListener('touchend', onTouchEnd);
     scope.domElement.addEventListener('touchmove', onTouchMove, {passive:false});
 
-    // Mixin EventDispatcher
-    Object.assign(this, THREE.EventDispatcher.prototype);
     this.update();
   };
 }());
