@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aston Martin DB11 — Interactive 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+      color: #e8e8e8;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+    }
+
+    /* ── Top title ── */
+    #title-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 0 10px;
+      background: linear-gradient(to bottom, rgba(0,0,0,.8), transparent);
+      z-index: 10;
+      pointer-events: none;
+    }
+    #title-bar h1 {
+      font-size: 22px;
+      font-weight: 300;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      color: #c9a84c;
+      text-shadow: 0 0 30px rgba(201,168,76,.5);
+    }
+    #title-bar span {
+      font-size: 11px;
+      color: #888;
+      letter-spacing: 3px;
+      display: block;
+      text-align: center;
+      margin-top: 3px;
+    }
+
+    /* ── Side panel ── */
+    #panel {
+      position: fixed;
+      top: 50%;
+      right: 24px;
+      transform: translateY(-50%);
+      background: rgba(10,10,20,.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(201,168,76,.2);
+      border-radius: 14px;
+      padding: 24px 20px;
+      z-index: 10;
+      width: 210px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.6);
+    }
+    #panel h2 {
+      font-size: 10px;
+      letter-spacing: 4px;
+      color: #c9a84c;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+      border-bottom: 1px solid rgba(201,168,76,.2);
+      padding-bottom: 10px;
+    }
+
+    .control-group { margin-bottom: 16px; }
+    .control-group label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #888;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    /* Color swatches */
+    .swatch-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .swatch {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform .15s, border-color .15s;
+    }
+    .swatch:hover  { transform: scale(1.15); }
+    .swatch.active { border-color: #c9a84c; }
+
+    /* Sliders */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 3px;
+      background: rgba(255,255,255,.15);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #c9a84c;
+      cursor: pointer;
+    }
+    .slider-val {
+      font-size: 10px;
+      color: #666;
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 8px; }
+    .btn {
+      flex: 1;
+      padding: 8px 0;
+      border: 1px solid rgba(201,168,76,.35);
+      border-radius: 8px;
+      background: rgba(201,168,76,.05);
+      color: #c9a84c;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background .2s, border-color .2s;
+    }
+    .btn:hover  { background: rgba(201,168,76,.15); border-color: #c9a84c; }
+    .btn.active { background: rgba(201,168,76,.25); border-color: #c9a84c; }
+
+    /* Divider */
+    .divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,.07);
+      margin: 14px 0;
+    }
+
+    /* ── Bottom hint ── */
+    #hint {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: rgba(255,255,255,.25);
+      text-transform: uppercase;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Loading overlay */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #0a0a0f;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity .8s;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    .loader-ring {
+      width: 60px; height: 60px;
+      border: 2px solid rgba(201,168,76,.15);
+      border-top-color: #c9a84c;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p {
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: #888;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="loader-ring"></div>
+  <p>Initialising</p>
+</div>
+
+<!-- Canvas -->
+<div id="canvas-container"></div>
+
+<!-- Title -->
+<div id="title-bar">
+  <div>
+    <h1>Aston Martin DB11</h1>
+    <span>Interactive 3D Configurator</span>
+  </div>
+</div>
+
+<!-- Control panel -->
+<div id="panel">
+  <h2>Configure</h2>
+
+  <div class="control-group">
+    <label>Body Colour</label>
+    <div class="swatch-row" id="body-swatches">
+      <div class="swatch active" style="background:#1a3a6e;" data-color="#1a3a6e" title="Racing Blue"></div>
+      <div class="swatch" style="background:#1a1a1a;" data-color="#1a1a1a" title="Jet Black"></div>
+      <div class="swatch" style="background:#c9a84c;" data-color="#c9a84c" title="Champagne Gold"></div>
+      <div class="swatch" style="background:#8b0000;" data-color="#8b0000" title="Volcano Red"></div>
+      <div class="swatch" style="background:#2d5a2d;" data-color="#2d5a2d" title="British Racing Green"></div>
+      <div class="swatch" style="background:#f0f0f0;" data-color="#f0f0f0" title="Stratus White"></div>
+    </div>
+  </div>
+
+  <div class="control-group">
+    <label>Wheel Finish</label>
+    <div class="swatch-row" id="wheel-swatches">
+      <div class="swatch active" style="background:#c0c0c0;" data-color="#c0c0c0" title="Polished Silver"></div>
+      <div class="swatch" style="background:#1a1a1a;" data-color="#1a1a1a" title="Gloss Black"></div>
+      <div class="swatch" style="background:#c9a84c;" data-color="#c9a84c" title="Gold Sport"></div>
+      <div class="swatch" style="background:#8b7355;" data-color="#8b7355" title="Bronze"></div>
+    </div>
+  </div>
+
+  <div class="control-group">
+    <label>Roughness — <span id="roughness-val">0.35</span></label>
+    <input type="range" id="roughness" min="0" max="100" value="35" />
+  </div>
+
+  <div class="control-group">
+    <label>Clearcoat — <span id="clearcoat-val">1.0</span></label>
+    <input type="range" id="clearcoat" min="0" max="100" value="100" />
+  </div>
+
+  <div class="control-group">
+    <label>Metalness — <span id="metalness-val">0.9</span></label>
+    <input type="range" id="metalness" min="0" max="100" value="90" />
+  </div>
+
+  <hr class="divider" />
+
+  <div class="control-group">
+    <label>View</label>
+    <div class="btn-row">
+      <button class="btn" id="btn-front">Front</button>
+      <button class="btn" id="btn-side">Side</button>
+      <button class="btn" id="btn-top">Top</button>
+    </div>
+  </div>
+
+  <div class="control-group">
+    <div class="btn-row">
+      <button class="btn" id="btn-autorotate">Auto Rotate</button>
+      <button class="btn" id="btn-reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="control-group">
+    <label>Environment</label>
+    <div class="btn-row">
+      <button class="btn active" id="env-studio">Studio</button>
+      <button class="btn" id="env-night">Night</button>
+    </div>
+  </div>
+</div>
+
+<div id="hint">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
+
+<!-- Three.js from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script>
+// ─────────────────────────────────────────────
+//  OrbitControls (inlined, r134-compatible)
+// ─────────────────────────────────────────────
+(function () {
+  "use strict";
+  const _changeEvent = { type: "change" };
+  const _startEvent  = { type: "start" };
+  const _endEvent    = { type: "end" };
+  const EPS = 0.000001;
+  const twoPI = 2 * Math.PI;
+
+  const STATE = { NONE:-1, ROTATE:0, DOLLY:1, PAN:2,
+    TOUCH_ROTATE:3, TOUCH_PAN:4, TOUCH_DOLLY_PAN:5, TOUCH_DOLLY_ROTATE:6 };
+
+  THREE.OrbitControls = function (object, domElement) {
+    if (domElement === undefined) console.warn('THREE.OrbitControls: The second parameter "domElement" is now mandatory.');
+    if (domElement === document) console.error('THREE.OrbitControls: "document" should not be used as the target "domElement". Please use "renderer.domElement" instead.');
+    this.object = object;
+    this.domElement = domElement;
+    this.enabled = true;
+    this.target = new THREE.Vector3();
+    this.minDistance = 0;
+    this.maxDistance = Infinity;
+    this.minZoom = 0;
+    this.maxZoom = Infinity;
+    this.minPolarAngle = 0;
+    this.maxPolarAngle = Math.PI;
+    this.minAzimuthAngle = -Infinity;
+    this.maxAzimuthAngle = Infinity;
+    this.enableDamping = false;
+    this.dampingFactor = 0.05;
+    this.enableZoom = true;
+    this.zoomSpeed = 1.0;
+    this.enableRotate = true;
+    this.rotateSpeed = 1.0;
+    this.enablePan = true;
+    this.panSpeed = 1.0;
+    this.screenSpacePanning = true;
+    this.keyPanSpeed = 7.0;
+    this.autoRotate = false;
+    this.autoRotateSpeed = 2.0;
+    this.keys = { LEFT:'ArrowLeft', UP:'ArrowUp', RIGHT:'ArrowRight', BOTTOM:'ArrowDown' };
+    this.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    this.target0 = this.target.clone();
+    this.position0 = this.object.position.clone();
+    this.zoom0 = this.object.zoom;
+    this._domElementKeyEvents = null;
+
+    const scope = this;
+    const spherical = new THREE.Spherical();
+    const sphericalDelta = new THREE.Spherical();
+    let scale = 1;
+    const panOffset = new THREE.Vector3();
+    let zoomChanged = false;
+    const rotateStart = new THREE.Vector2();
+    const rotateEnd   = new THREE.Vector2();
+    const rotateDelta = new THREE.Vector2();
+    const panStart = new THREE.Vector2();
+    const panEnd   = new THREE.Vector2();
+    const panDelta = new THREE.Vector2();
+    const dollyStart = new THREE.Vector2();
+    const dollyEnd   = new THREE.Vector2();
+    const dollyDelta = new THREE.Vector2();
+    let state = STATE.NONE;
+    const v = new THREE.Vector3();
+
+    function getAutoRotationAngle() { return twoPI / 60 / 60 * scope.autoRotateSpeed; }
+    function getZoomScale() { return Math.pow(0.95, scope.zoomSpeed); }
+    function rotateLeft(angle)  { sphericalDelta.theta -= angle; }
+    function rotateUp(angle)    { sphericalDelta.phi   -= angle; }
+
+    const panLeft = (function() {
+      const v = new THREE.Vector3();
+      return function(distance, objectMatrix) {
+        v.setFromMatrixColumn(objectMatrix, 0);
+        v.multiplyScalar(-distance);
+        panOffset.add(v);
+      };
+    }());
+    const panUp = (function() {
+      const v = new THREE.Vector3();
+      return function(distance, objectMatrix) {
+        if (scope.screenSpacePanning) {
+          v.setFromMatrixColumn(objectMatrix, 1);
+        } else {
+          v.setFromMatrixColumn(objectMatrix, 0);
+          v.crossVectors(scope.object.up, v);
+        }
+        v.multiplyScalar(distance);
+        panOffset.add(v);
+      };
+    }());
+    const pan = (function() {
+      const offset = new THREE.Vector3();
+      return function(deltaX, deltaY) {
+        const element = scope.domElement;
+        if (scope.object.isPerspectiveCamera) {
+          const position = scope.object.position;
+          offset.copy(position).sub(scope.target);
+          let targetDistance = offset.length();
+          targetDistance *= Math.tan((scope.object.fov / 2) * Math.PI / 180.0);
+          panLeft(2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix);
+          panUp(2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix);
+        } else if (scope.object.isOrthographicCamera) {
+          panLeft(deltaX * (scope.object.right - scope.object.left) / scope.object.zoom / element.clientWidth, scope.object.matrix);
+          panUp(deltaY * (scope.object.top - scope.object.bottom) / scope.object.zoom / element.clientHeight, scope.object.matrix);
+        }
+      };
+    }());
+
+    function dollyOut(dollyScale) { scale /= dollyScale; }
+    function dollyIn(dollyScale)  { scale *= dollyScale; }
+
+    this.update = (function() {
+      const offset = new THREE.Vector3();
+      const quat = new THREE.Quaternion().setFromUnitVectors(object.up, new THREE.Vector3(0,1,0));
+      const quatInverse = quat.clone().invert();
+      const lastPosition = new THREE.Vector3();
+      const lastQuaternion = new THREE.Quaternion();
+      return function update() {
+        const position = scope.object.position;
+        offset.copy(position).sub(scope.target);
+        offset.applyQuaternion(quat);
+        spherical.setFromVector3(offset);
+        if (scope.autoRotate && state === STATE.NONE) rotateLeft(getAutoRotationAngle());
+        if (scope.enableDamping) {
+          spherical.theta += sphericalDelta.theta * scope.dampingFactor;
+          spherical.phi   += sphericalDelta.phi   * scope.dampingFactor;
+        } else {
+          spherical.theta += sphericalDelta.theta;
+          spherical.phi   += sphericalDelta.phi;
+        }
+        let min = scope.minAzimuthAngle, max = scope.maxAzimuthAngle;
+        if (isFinite(min) && isFinite(max)) {
+          if (min < -Math.PI) min += twoPI; else if (min > Math.PI) min -= twoPI;
+          if (max < -Math.PI) max += twoPI; else if (max > Math.PI) max -= twoPI;
+          spherical.theta = (min <= max) ?
+            Math.max(min, Math.min(max, spherical.theta)) :
+            (spherical.theta > (min + max) / 2 ? Math.max(min, spherical.theta) : Math.min(max, spherical.theta));
+        }
+        spherical.phi = Math.max(scope.minPolarAngle, Math.min(scope.maxPolarAngle, spherical.phi));
+        spherical.makeSafe();
+        spherical.radius = Math.max(scope.minDistance, Math.min(scope.maxDistance, spherical.radius * scale));
+        if (scope.enableDamping) scope.target.addScaledVector(panOffset, scope.dampingFactor);
+        else scope.target.add(panOffset);
+        offset.setFromSpherical(spherical);
+        offset.applyQuaternion(quatInverse);
+        position.copy(scope.target).add(offset);
+        scope.object.lookAt(scope.target);
+        if (scope.enableDamping) {
+          sphericalDelta.theta *= (1 - scope.dampingFactor);
+          sphericalDelta.phi   *= (1 - scope.dampingFactor);
+          panOffset.multiplyScalar(1 - scope.dampingFactor);
+        } else {
+          sphericalDelta.set(0,0,0);
+          panOffset.set(0,0,0);
+        }
+        scale = 1;
+        if (zoomChanged || lastPosition.distanceToSquared(scope.object.position) > EPS ||
+            8 * (1 - lastQuaternion.dot(scope.object.quaternion)) > EPS) {
+          scope.dispatchEvent(_changeEvent);
+          lastPosition.copy(scope.object.position);
+          lastQuaternion.copy(scope.object.quaternion);
+          zoomChanged = false;
+          return true;
+        }
+        return false;
+      };
+    }());
+
+    this.saveState = function() {
+      scope.target0.copy(scope.target);
+      scope.position0.copy(scope.object.position);
+      scope.zoom0 = scope.object.zoom;
+    };
+    this.reset = function() {
+      scope.target.copy(scope.target0);
+      scope.object.position.copy(scope.position0);
+      scope.object.zoom = scope.zoom0;
+      scope.object.updateProjectionMatrix();
+      scope.dispatchEvent(_changeEvent);
+      scope.update();
+      state = STATE.NONE;
+    };
+    this.listenToKeyEvents = function(domElement) {
+      domElement.addEventListener('keydown', onKeyDown);
+      scope._domElementKeyEvents = domElement;
+    };
+    this.dispose = function() {
+      scope.domElement.removeEventListener('contextmenu', onContextMenu);
+      scope.domElement.removeEventListener('mousedown', onMouseDown);
+      scope.domElement.removeEventListener('wheel', onMouseWheel);
+      scope.domElement.removeEventListener('touchstart', onTouchStart);
+      scope.domElement.removeEventListener('touchend', onTouchEnd);
+      scope.domElement.removeEventListener('touchmove', onTouchMove);
+      scope.domElement.ownerDocument.removeEventListener('mousemove', onMouseMove);
+      scope.domElement.ownerDocument.removeEventListener('mouseup', onMouseUp);
+      if (scope._domElementKeyEvents !== null) scope._domElementKeyEvents.removeEventListener('keydown', onKeyDown);
+    };
+
+    function handleMouseDownRotate(e) { rotateStart.set(e.clientX, e.clientY); }
+    function handleMouseDownDolly(e)  { dollyStart.set(e.clientX, e.clientY); }
+    function handleMouseDownPan(e)    { panStart.set(e.clientX, e.clientY); }
+    function handleMouseMoveRotate(e) {
+      rotateEnd.set(e.clientX, e.clientY);
+      rotateDelta.subVectors(rotateEnd, rotateStart).multiplyScalar(scope.rotateSpeed);
+      const element = scope.domElement;
+      rotateLeft(twoPI * rotateDelta.x / element.clientHeight);
+      rotateUp(twoPI * rotateDelta.y / element.clientHeight);
+      rotateStart.copy(rotateEnd);
+      scope.update();
+    }
+    function handleMouseMoveDolly(e) {
+      dollyEnd.set(e.clientX, e.clientY);
+      dollyDelta.subVectors(dollyEnd, dollyStart);
+      if (dollyDelta.y > 0) dollyOut(getZoomScale());
+      else if (dollyDelta.y < 0) dollyIn(getZoomScale());
+      dollyStart.copy(dollyEnd);
+      scope.update();
+    }
+    function handleMouseMovePan(e) {
+      panEnd.set(e.clientX, e.clientY);
+      panDelta.subVectors(panEnd, panStart).multiplyScalar(scope.panSpeed);
+      pan(panDelta.x, panDelta.y);
+      panStart.copy(panEnd);
+      scope.update();
+    }
+    function handleMouseWheel(e) {
+      if (e.deltaY < 0) dollyIn(getZoomScale());
+      else if (e.deltaY > 0) dollyOut(getZoomScale());
+      scope.update();
+    }
+    function handleKeyDown(e) {
+      let needsUpdate = false;
+      switch (e.code) {
+        case scope.keys.UP:     pan(0,  scope.keyPanSpeed); needsUpdate = true; break;
+        case scope.keys.BOTTOM: pan(0, -scope.keyPanSpeed); needsUpdate = true; break;
+        case scope.keys.LEFT:   pan( scope.keyPanSpeed, 0); needsUpdate = true; break;
+        case scope.keys.RIGHT:  pan(-scope.keyPanSpeed, 0); needsUpdate = true; break;
+      }
+      if (needsUpdate) { e.preventDefault(); scope.update(); }
+    }
+    function handleTouchStartRotate(e) {
+      if (e.touches.length === 1) rotateStart.set(e.touches[0].pageX, e.touches[0].pageY);
+      else {
+        const x = 0.5*(e.touches[0].pageX+e.touches[1].pageX);
+        const y = 0.5*(e.touches[0].pageY+e.touches[1].pageY);
+        rotateStart.set(x,y);
+      }
+    }
+    function handleTouchStartPan(e) {
+      if (e.touches.length === 1) panStart.set(e.touches[0].pageX, e.touches[0].pageY);
+      else {
+        const x = 0.5*(e.touches[0].pageX+e.touches[1].pageX);
+        const y = 0.5*(e.touches[0].pageY+e.touches[1].pageY);
+        panStart.set(x,y);
+      }
+    }
+    function handleTouchStartDolly(e) {
+      const dx = e.touches[0].pageX - e.touches[1].pageX;
+      const dy = e.touches[0].pageY - e.touches[1].pageY;
+      dollyStart.set(0, Math.sqrt(dx*dx+dy*dy));
+    }
+    function handleTouchStartDollyPan(e) {
+      if (scope.enableZoom) handleTouchStartDolly(e);
+      if (scope.enablePan)  handleTouchStartPan(e);
+    }
+    function handleTouchMoveRotate(e) {
+      if (e.touches.length === 1) rotateEnd.set(e.touches[0].pageX, e.touches[0].pageY);
+      else {
+        const x = 0.5*(e.touches[0].pageX+e.touches[1].pageX);
+        const y = 0.5*(e.touches[0].pageY+e.touches[1].pageY);
+        rotateEnd.set(x,y);
+      }
+      rotateDelta.subVectors(rotateEnd, rotateStart).multiplyScalar(scope.rotateSpeed);
+      const element = scope.domElement;
+      rotateLeft(twoPI * rotateDelta.x / element.clientHeight);
+      rotateUp(twoPI * rotateDelta.y / element.clientHeight);
+      rotateStart.copy(rotateEnd);
+    }
+    function handleTouchMovePan(e) {
+      if (e.touches.length === 1) panEnd.set(e.touches[0].pageX, e.touches[0].pageY);
+      else {
+        const x = 0.5*(e.touches[0].pageX+e.touches[1].pageX);
+        const y = 0.5*(e.touches[0].pageY+e.touches[1].pageY);
+        panEnd.set(x,y);
+      }
+      panDelta.subVectors(panEnd, panStart).multiplyScalar(scope.panSpeed);
+      pan(panDelta.x, panDelta.y);
+      panStart.copy(panEnd);
+    }
+    function handleTouchMoveDolly(e) {
+      const dx = e.touches[0].pageX - e.touches[1].pageX;
+      const dy = e.touches[0].pageY - e.touches[1].pageY;
+      dollyEnd.set(0, Math.sqrt(dx*dx+dy*dy));
+      dollyDelta.set(0, Math.pow(dollyEnd.y/dollyStart.y, scope.zoomSpeed));
+      dollyOut(dollyDelta.y);
+      dollyStart.copy(dollyEnd);
+    }
+    function handleTouchMoveDollyPan(e) {
+      if (scope.enableZoom) handleTouchMoveDolly(e);
+      if (scope.enablePan)  handleTouchMovePan(e);
+    }
+
+    function onMouseDown(e) {
+      if (!scope.enabled) return;
+      e.preventDefault();
+      switch (scope.mouseButtons[['LEFT','MIDDLE','RIGHT'][e.button]]) {
+        case THREE.MOUSE.ROTATE:
+          if (e.ctrlKey||e.metaKey||e.shiftKey) { handleMouseDownPan(e); state=STATE.PAN; }
+          else { handleMouseDownRotate(e); state=STATE.ROTATE; }
+          break;
+        case THREE.MOUSE.DOLLY: handleMouseDownDolly(e); state=STATE.DOLLY; break;
+        case THREE.MOUSE.PAN:
+          if (e.ctrlKey||e.metaKey||e.shiftKey) { handleMouseDownRotate(e); state=STATE.ROTATE; }
+          else { handleMouseDownPan(e); state=STATE.PAN; }
+          break;
+      }
+      if (state !== STATE.NONE) {
+        scope.domElement.ownerDocument.addEventListener('mousemove', onMouseMove);
+        scope.domElement.ownerDocument.addEventListener('mouseup', onMouseUp);
+        scope.dispatchEvent(_startEvent);
+      }
+    }
+    function onMouseMove(e) {
+      if (!scope.enabled) return;
+      e.preventDefault();
+      if (state===STATE.ROTATE) handleMouseMoveRotate(e);
+      else if (state===STATE.DOLLY)  handleMouseMoveDolly(e);
+      else if (state===STATE.PAN)    handleMouseMovePan(e);
+    }
+    function onMouseUp(e) {
+      scope.domElement.ownerDocument.removeEventListener('mousemove', onMouseMove);
+      scope.domElement.ownerDocument.removeEventListener('mouseup', onMouseUp);
+      scope.dispatchEvent(_endEvent);
+      state = STATE.NONE;
+    }
+    function onMouseWheel(e) {
+      if (!scope.enabled || !scope.enableZoom || (state!==STATE.NONE && state!==STATE.ROTATE)) return;
+      e.preventDefault();
+      scope.dispatchEvent(_startEvent);
+      handleMouseWheel(e);
+      scope.dispatchEvent(_endEvent);
+    }
+    function onKeyDown(e) { if (scope.enabled && scope.enablePan) handleKeyDown(e); }
+    function onTouchStart(e) {
+      if (!scope.enabled) return;
+      e.preventDefault();
+      switch (e.touches.length) {
+        case 1:
+          if (scope.touches.ONE===THREE.TOUCH.ROTATE && scope.enableRotate) { handleTouchStartRotate(e); state=STATE.TOUCH_ROTATE; }
+          else if (scope.touches.ONE===THREE.TOUCH.PAN && scope.enablePan) { handleTouchStartPan(e); state=STATE.TOUCH_PAN; }
+          else state=STATE.NONE;
+          break;
+        case 2:
+          if (scope.touches.TWO===THREE.TOUCH.DOLLY_PAN) { handleTouchStartDollyPan(e); state=STATE.TOUCH_DOLLY_PAN; }
+          else state=STATE.NONE;
+          break;
+        default: state=STATE.NONE;
+      }
+      if (state!==STATE.NONE) scope.dispatchEvent(_startEvent);
+    }
+    function onTouchMove(e) {
+      if (!scope.enabled) return;
+      e.preventDefault();
+      if (state===STATE.TOUCH_ROTATE) { handleTouchMoveRotate(e); scope.update(); }
+      else if (state===STATE.TOUCH_PAN) { handleTouchMovePan(e); scope.update(); }
+      else if (state===STATE.TOUCH_DOLLY_PAN) { handleTouchMoveDollyPan(e); scope.update(); }
+    }
+    function onTouchEnd(e) { if (!scope.enabled) return; scope.dispatchEvent(_endEvent); state=STATE.NONE; }
+    function onContextMenu(e) { if (!scope.enabled) return; e.preventDefault(); }
+
+    scope.domElement.addEventListener('contextmenu', onContextMenu);
+    scope.domElement.addEventListener('mousedown', onMouseDown);
+    scope.domElement.addEventListener('wheel', onMouseWheel, {passive:false});
+    scope.domElement.addEventListener('touchstart', onTouchStart, {passive:false});
+    scope.domElement.addEventListener('touchend', onTouchEnd);
+    scope.domElement.addEventListener('touchmove', onTouchMove, {passive:false});
+
+    // Mixin EventDispatcher
+    Object.assign(this, THREE.EventDispatcher.prototype);
+    this.update();
+  };
+}());
+
+// ─────────────────────────────────────────────
+//  Main scene
+// ─────────────────────────────────────────────
+(function () {
+  "use strict";
+
+  // ── Renderer ──
+  const container = document.getElementById('canvas-container');
+  const renderer  = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.physicallyCorrectLights = true;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  // Tone mapping
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  container.appendChild(renderer.domElement);
+
+  // ── Camera ──
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
+  camera.position.set(7, 3, 7);
+
+  // ── Controls ──
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0.8, 0);
+  controls.minDistance = 3;
+  controls.maxDistance = 18;
+  controls.maxPolarAngle = Math.PI / 2 + 0.05;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.update();
+
+  // ── Scene ──
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0d0d18);
+  scene.fog = new THREE.FogExp2(0x0d0d18, 0.04);
+
+  // ── Materials (shared refs for live editing) ──
+  const bodyMat = new THREE.MeshPhysicalMaterial({
+    color: 0x1a3a6e,
+    metalness: 0.9,
+    roughness: 0.35,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.03,
+    envMapIntensity: 1.4,
+  });
+  const wheelMat = new THREE.MeshPhysicalMaterial({
+    color: 0xc0c0c0,
+    metalness: 1.0,
+    roughness: 0.3,
+    clearcoat: 0.5,
+  });
+  const glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xaaccff,
+    metalness: 0.05,
+    roughness: 0.0,
+    transmission: 0.85,
+    transparent: true,
+    opacity: 0.7,
+    envMapIntensity: 1.2,
+  });
+  const interiorMat = new THREE.MeshStandardMaterial({
+    color: 0x1a0a00,
+    roughness: 0.8,
+    metalness: 0.0,
+  });
+  const chromeMat = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    metalness: 1.0,
+    roughness: 0.05,
+    envMapIntensity: 2.0,
+  });
+  const rubberMat = new THREE.MeshStandardMaterial({
+    color: 0x111111,
+    roughness: 0.95,
+    metalness: 0.0,
+  });
+  const lightMat = new THREE.MeshPhysicalMaterial({
+    color: 0xffeebb,
+    emissive: 0xffeebb,
+    emissiveIntensity: 0.8,
+    roughness: 0.1,
+    metalness: 0.2,
+    envMapIntensity: 1.0,
+  });
+  const tailMat = new THREE.MeshPhysicalMaterial({
+    color: 0xff2200,
+    emissive: 0xff2200,
+    emissiveIntensity: 0.6,
+    roughness: 0.1,
+    metalness: 0.0,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const underMat = new THREE.MeshStandardMaterial({
+    color: 0x222222,
+    roughness: 0.9,
+    metalness: 0.3,
+  });
+
+  // ── PMREMGenerator for env lighting ──
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileEquirectangularShader();
+
+  function buildEnvStudio() {
+    const rt = pmremGenerator.fromScene(new THREE.RoomEnvironment());
+    return rt.texture;
+  }
+
+  scene.environment = buildEnvStudio();
+  scene.environment.mapping = THREE.EquirectangularReflectionMapping;
+
+  // ── Ground ──
+  const groundGeo  = new THREE.PlaneGeometry(60, 60);
+  const groundMat  = new THREE.MeshStandardMaterial({
+    color: 0x0d0d18,
+    roughness: 1.0,
+    metalness: 0.0,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // ── Reflective floor disc ──
+  const discGeo = new THREE.CircleGeometry(5, 64);
+  const discMat = new THREE.MeshPhysicalMaterial({
+    color: 0x0a0a14,
+    metalness: 0.9,
+    roughness: 0.15,
+    envMapIntensity: 0.6,
+  });
+  const disc = new THREE.Mesh(discGeo, discMat);
+  disc.rotation.x = -Math.PI/2;
+  disc.position.y = 0.001;
+  disc.receiveShadow = true;
+  scene.add(disc);
+
+  // ── Grid lines ──
+  const grid = new THREE.GridHelper(30, 40, 0x2244aa, 0x1a2255);
+  grid.material.opacity = 0.3;
+  grid.material.transparent = true;
+  grid.position.y = 0.002;
+  scene.add(grid);
+
+  // ── Lights ──
+  const ambient = new THREE.AmbientLight(0x112244, 0.8);
+  scene.add(ambient);
+
+  const mainLight = new THREE.DirectionalLight(0xfff6e0, 2.5);
+  mainLight.position.set(8, 12, 5);
+  mainLight.castShadow = true;
+  mainLight.shadow.mapSize.set(2048, 2048);
+  mainLight.shadow.camera.near = 0.5;
+  mainLight.shadow.camera.far = 40;
+  mainLight.shadow.camera.left = -8;
+  mainLight.shadow.camera.right = 8;
+  mainLight.shadow.camera.top = 6;
+  mainLight.shadow.camera.bottom = -2;
+  mainLight.shadow.bias = -0.001;
+  scene.add(mainLight);
+
+  const fillLight = new THREE.DirectionalLight(0x4488ff, 0.8);
+  fillLight.position.set(-6, 4, -4);
+  scene.add(fillLight);
+
+  const rimLight = new THREE.DirectionalLight(0xffc080, 0.6);
+  rimLight.position.set(0, 3, -8);
+  scene.add(rimLight);
+
+  const bottomLight = new THREE.HemisphereLight(0x112244, 0x442211, 0.4);
+  scene.add(bottomLight);
+
+  // spotlight on the car
+  const spot = new THREE.SpotLight(0xfff0d0, 3.0, 30, Math.PI/6, 0.5, 1.5);
+  spot.position.set(0, 15, 0);
+  spot.target.position.set(0, 0, 0);
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+  scene.add(spot.target);
+
+  // ────────────────────────────────────────────
+  //  Procedural Aston Martin DB11-inspired model
+  // ────────────────────────────────────────────
+
+  const carGroup = new THREE.Group();
+
+  // Helper
+  function addMesh(geo, mat, x, y, z, rx, ry, rz) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    if (rx) m.rotation.x = rx;
+    if (ry) m.rotation.y = ry;
+    if (rz) m.rotation.z = rz;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    carGroup.add(m);
+    return m;
+  }
+
+  // ──  BODY  ──────────────────────────────────
+  // Main body — wide flat box with rounded corners via CylinderGeometry trick
+  const bodyMain = addMesh(
+    new THREE.BoxGeometry(3.8, 0.45, 1.72),
+    bodyMat, 0, 0.66, 0
+  );
+
+  // Lower skirt / rocker
+  addMesh(new THREE.BoxGeometry(3.5, 0.18, 1.9), bodyMat, 0, 0.38, 0);
+
+  // Bonnet (hood) — sloped wedge
+  const hoodPts = [
+    new THREE.Vector2(0,    0),
+    new THREE.Vector2(1.9,  0),
+    new THREE.Vector2(1.9,  0.28),
+    new THREE.Vector2(0.4,  0.46),
+    new THREE.Vector2(0,    0.46),
+  ];
+  const hoodShape = new THREE.Shape(hoodPts);
+  const hoodGeo   = new THREE.ExtrudeGeometry(hoodShape, { depth: 1.72, bevelEnabled: false });
+  const hood = new THREE.Mesh(hoodGeo, bodyMat);
+  hood.position.set(-1.9, 0.66, -0.86);
+  hood.rotation.y = Math.PI;
+  hood.castShadow = true;
+  carGroup.add(hood);
+
+  // Bootlid / trunk
+  const trunkPts = [
+    new THREE.Vector2(0,    0),
+    new THREE.Vector2(1.0,  0),
+    new THREE.Vector2(1.0,  0.12),
+    new THREE.Vector2(0,    0.22),
+  ];
+  const trunkShape = new THREE.Shape(trunkPts);
+  const trunkGeo   = new THREE.ExtrudeGeometry(trunkShape, { depth: 1.72, bevelEnabled: false });
+  const trunk = new THREE.Mesh(trunkGeo, bodyMat);
+  trunk.position.set(1.9, 0.66, 0.86);
+  trunk.castShadow = true;
+  carGroup.add(trunk);
+
+  // ── Cabin ────────────────────────────────────
+  const cabinPts = [
+    new THREE.Vector2(0,    0),
+    new THREE.Vector2(1.62, 0),
+    new THREE.Vector2(1.62, 0.58),
+    new THREE.Vector2(1.28, 0.85),
+    new THREE.Vector2(0.32, 0.85),
+    new THREE.Vector2(0,    0.62),
+  ];
+  const cabShape = new THREE.Shape(cabinPts);
+  const cabGeo   = new THREE.ExtrudeGeometry(cabShape, { depth: 1.55, bevelEnabled: false });
+  const cabin = new THREE.Mesh(cabGeo, bodyMat);
+  cabin.position.set(-0.81, 0.88, -0.775);
+  cabin.castShadow = true;
+  carGroup.add(cabin);
+
+  // ── Windshield ────────────────────────────────
+  const wsPts = [
+    new THREE.Vector2(0,    0),
+    new THREE.Vector2(0.96, 0),
+    new THREE.Vector2(0.64, 0.83),
+    new THREE.Vector2(0,    0.83),
+  ];
+  const wsShape = new THREE.Shape(wsPts);
+  const wsGeo = new THREE.ExtrudeGeometry(wsShape, { depth:1.52, bevelEnabled:false });
+  const windshield = new THREE.Mesh(wsGeo, glassMat);
+  windshield.position.set(-0.81, 0.88, -0.76);
+  windshield.castShadow = false;
+  carGroup.add(windshield);
+
+  // Rear glass
+  const rgPts = [
+    new THREE.Vector2(0,    0),
+    new THREE.Vector2(0.65, 0),
+    new THREE.Vector2(0.65, 0.78),
+    new THREE.Vector2(0,    0.78),
+  ];
+  const rgShape = new THREE.Shape(rgPts);
+  const rgGeo = new THREE.ExtrudeGeometry(rgShape, { depth:1.52, bevelEnabled:false });
+  const rearGlass = new THREE.Mesh(rgGeo, glassMat);
+  rearGlass.position.set(0.81, 0.88, -0.76);
+  carGroup.add(rearGlass);
+
+  // Side windows (L & R)
+  for (const side of [-1, 1]) {
+    const swGeo = new THREE.BoxGeometry(1.4, 0.52, 0.04);
+    const sw = new THREE.Mesh(swGeo, glassMat);
+    sw.position.set(0, 1.22, side * 0.795);
+    carGroup.add(sw);
+  }
+
+  // ── Bonnet vents ─────────────────────────────
+  for (let i = -1; i <= 1; i += 2) {
+    const ventGeo = new THREE.BoxGeometry(0.35, 0.04, 0.08);
+    const vent = new THREE.Mesh(ventGeo, chromeMat);
+    vent.position.set(-0.9, 0.95, i * 0.28);
+    vent.rotation.x = -0.12;
+    carGroup.add(vent);
+  }
+
+  // ── Front & Rear bumpers ─────────────────────
+  // Front bumper
+  addMesh(new THREE.BoxGeometry(3.82, 0.32, 0.12), bodyMat, -1.86, 0.40, 0);
+  // Chrome grille surround
+  addMesh(new THREE.BoxGeometry(1.9, 0.22, 0.04), chromeMat, -1.87, 0.52, 0);
+  // Front lower splitter
+  addMesh(new THREE.BoxGeometry(3.6, 0.06, 0.18), underMat, -1.9, 0.24, 0);
+
+  // Rear bumper
+  addMesh(new THREE.BoxGeometry(3.82, 0.32, 0.12), bodyMat, 1.86, 0.40, 0);
+  // Rear diffuser
+  addMesh(new THREE.BoxGeometry(2.4, 0.14, 0.22), underMat, 2.0, 0.22, 0);
+
+  // ── Grille mesh (front) ──────────────────────
+  const grilleGeo = new THREE.BoxGeometry(1.7, 0.18, 0.06);
+  addMesh(grilleGeo, chromeMat, -1.88, 0.44, 0);
+  // Grille crest
+  const crestGeo = new THREE.BoxGeometry(0.28, 0.14, 0.04);
+  addMesh(crestGeo, chromeMat, -1.91, 0.54, 0);
+
+  // ── Side air intakes ─────────────────────────
+  for (const side of [-1, 1]) {
+    const intakeGeo = new THREE.BoxGeometry(0.32, 0.12, 0.06);
+    const intake = new THREE.Mesh(intakeGeo, bodyMat);
+    intake.position.set(-0.6, 0.38, side * 0.88);
+    intake.rotation.y = side * 0.25;
+    carGroup.add(intake);
+    const slatGeo = new THREE.BoxGeometry(0.28, 0.02, 0.05);
+    for (let k=-1; k<=1; k++) {
+      const slat = new THREE.Mesh(slatGeo, chromeMat);
+      slat.position.set(-0.6, 0.38 + k*0.04, side * 0.88);
+      carGroup.add(slat);
+    }
+  }
+
+  // ── Door handles ─────────────────────────────
+  for (const side of [-1, 1]) {
+    const dhGeo = new THREE.BoxGeometry(0.25, 0.05, 0.04);
+    const dh = new THREE.Mesh(dhGeo, chromeMat);
+    dh.position.set(0.15, 0.98, side * 0.87);
+    carGroup.add(dh);
+  }
+
+  // ── Wing mirrors ─────────────────────────────
+  for (const side of [-1, 1]) {
+    const stemGeo = new THREE.BoxGeometry(0.04, 0.08, 0.18);
+    const stem = new THREE.Mesh(stemGeo, bodyMat);
+    stem.position.set(-0.72, 1.18, side * 0.84);
+    carGroup.add(stem);
+    const mirrorGeo = new THREE.BoxGeometry(0.18, 0.12, 0.06);
+    const mirror = new THREE.Mesh(mirrorGeo, chromeMat);
+    mirror.position.set(-0.7, 1.2, side * 0.9);
+    carGroup.add(mirror);
+  }
+
+  // ── Headlights ───────────────────────────────
+  for (const side of [-1, 1]) {
+    const hlGeo = new THREE.BoxGeometry(0.5, 0.14, 0.42);
+    const hl = new THREE.Mesh(hlGeo, lightMat);
+    hl.position.set(-1.78, 0.72, side * 0.62);
+    carGroup.add(hl);
+    // DRL strip
+    const drlGeo = new THREE.BoxGeometry(0.42, 0.04, 0.04);
+    const drl = new THREE.Mesh(drlGeo, lightMat);
+    drl.position.set(-1.78, 0.64, side * 0.62);
+    carGroup.add(drl);
+  }
+
+  // ── Tail lights ──────────────────────────────
+  for (const side of [-1, 1]) {
+    const tlGeo = new THREE.BoxGeometry(0.38, 0.12, 0.5);
+    const tl = new THREE.Mesh(tlGeo, tailMat);
+    tl.position.set(1.82, 0.72, side * 0.56);
+    carGroup.add(tl);
+  }
+
+  // ── Exhaust tips ─────────────────────────────
+  for (const side of [-1, 1]) {
+    const exGeo = new THREE.CylinderGeometry(0.07, 0.065, 0.18, 12);
+    const ex = new THREE.Mesh(exGeo, chromeMat);
+    ex.position.set(2.0, 0.25, side * 0.52);
+    ex.rotation.z = Math.PI/2;
+    carGroup.add(ex);
+  }
+
+  // ── Roof spoiler (ducktail) ──────────────────
+  const spoilerBlade = new THREE.BoxGeometry(1.62, 0.06, 0.32);
+  addMesh(spoilerBlade, bodyMat, 1.56, 1.48, 0);
+  const spoilerStandL = new THREE.BoxGeometry(0.06, 0.16, 0.12);
+  addMesh(spoilerStandL, bodyMat, 1.56, 1.38, -0.63);
+  const spoilerStandR = new THREE.BoxGeometry(0.06, 0.16, 0.12);
+  addMesh(spoilerStandR, bodyMat, 1.56, 1.38,  0.63);
+
+  // ── Under-panel / floor ──────────────────────
+  addMesh(new THREE.BoxGeometry(3.6, 0.04, 1.5), underMat, 0, 0.22, 0);
+
+  // ── Windshield wipers ────────────────────────
+  const wiperGeo = new THREE.BoxGeometry(0.6, 0.02, 0.04);
+  for (const side of [-1, 1]) {
+    const wiper = new THREE.Mesh(wiperGeo, chromeMat);
+    wiper.position.set(-0.48, 0.895, side * 0.3);
+    wiper.rotation.z = side * 0.4;
+    carGroup.add(wiper);
+  }
+
+  // ── WHEELS ──────────────────────────────────
+  const wheelPositions = [
+    { x:-1.38, y:0.36, z:-0.86, front:true },
+    { x:-1.38, y:0.36, z: 0.86, front:true },
+    { x: 1.38, y:0.36, z:-0.86, front:false },
+    { x: 1.38, y:0.36, z: 0.86, front:false },
+  ];
+
+  const wheelMeshes = [];
+  wheelPositions.forEach(wp => {
+    const wg = new THREE.Group();
+    wg.position.set(wp.x, wp.y, wp.z);
+
+    // Tyre
+    const tyreGeo = new THREE.TorusGeometry(0.34, 0.14, 18, 36);
+    const tyre = new THREE.Mesh(tyreGeo, rubberMat);
+    tyre.rotation.y = Math.PI/2;
+    tyre.castShadow = true;
+    wg.add(tyre);
+
+    // Rim hub
+    const hubGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.13, 20);
+    const hub = new THREE.Mesh(hubGeo, wheelMat);
+    hub.rotation.x = Math.PI/2;
+    hub.castShadow = true;
+    wg.add(hub);
+
+    // Spokes (5-spoke design)
+    for (let s = 0; s < 5; s++) {
+      const angle = (s / 5) * Math.PI*2;
+      const spokeGeo = new THREE.BoxGeometry(0.24, 0.05, 0.09);
+      const spoke = new THREE.Mesh(spokeGeo, wheelMat);
+      spoke.rotation.x = Math.PI/2;
+      spoke.rotation.z = angle;
+      spoke.position.set(Math.cos(angle)*0.14, 0, Math.sin(angle)*0.14);
+      spoke.castShadow = true;
+      wg.add(spoke);
+    }
+
+    // Brake disc (peeking behind spoke holes)
+    const discGeo2 = new THREE.CylinderGeometry(0.22, 0.22, 0.06, 20);
+    const brakeDisc = new THREE.Mesh(discGeo2, new THREE.MeshStandardMaterial({ color: 0x333333, metalness:0.8, roughness:0.6 }));
+    brakeDisc.rotation.x = Math.PI/2;
+    wg.add(brakeDisc);
+
+    // Brake caliper
+    const calGeo = new THREE.BoxGeometry(0.06, 0.12, 0.12);
+    const cal = new THREE.Mesh(calGeo, new THREE.MeshStandardMaterial({ color: 0xff2200, metalness:0.5, roughness:0.4 }));
+    cal.position.set(0, 0.18, 0);
+    wg.add(cal);
+
+    // Centre cap
+    const capGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.14, 12);
+    const cap = new THREE.Mesh(capGeo, chromeMat);
+    cap.rotation.x = Math.PI/2;
+    wg.add(cap);
+
+    scene.add(wg);
+    wheelMeshes.push(wg);
+  });
+
+  // ── Wheel arches (overfender-style bolted look) ──
+  const archPositions = [
+    { x:-1.38, side:-1 },
+    { x:-1.38, side: 1 },
+    { x: 1.38, side:-1 },
+    { x: 1.38, side: 1 },
+  ];
+  archPositions.forEach(ap => {
+    const archGeo = new THREE.TorusGeometry(0.44, 0.06, 8, 18, Math.PI);
+    const arch = new THREE.Mesh(archGeo, bodyMat);
+    arch.position.set(ap.x, 0.36, ap.side * 0.83);
+    arch.rotation.y = Math.PI/2;
+    arch.rotation.z = Math.PI;
+    arch.castShadow = true;
+    carGroup.add(arch);
+  });
+
+  // Final position
+  carGroup.position.y = 0.0;
+  scene.add(carGroup);
+
+  // ── Particle dust / studio atmosphere ────────
+  const particleCount = 300;
+  const particleGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    positions[i*3]   = (Math.random() - 0.5) * 20;
+    positions[i*3+1] = Math.random() * 8;
+    positions[i*3+2] = (Math.random() - 0.5) * 20;
+  }
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const particleMat = new THREE.PointsMaterial({ color: 0x4466cc, size: 0.04, transparent: true, opacity: 0.5 });
+  const particles = new THREE.Points(particleGeo, particleMat);
+  scene.add(particles);
+
+  // ────────────────────────────────────────────
+  //  Camera animation helpers
+  // ────────────────────────────────────────────
+  let camTarget = null;
+  let camProgress = 0;
+  let camFrom = null;
+
+  function lerpCamera(toPos, toTarget, duration) {
+    camFrom = { pos: camera.position.clone(), tgt: controls.target.clone() };
+    camTarget = { pos: toPos, tgt: toTarget, duration };
+    camProgress = 0;
+  }
+
+  // ────────────────────────────────────────────
+  //  UI panel wiring
+  // ────────────────────────────────────────────
+
+  // Body swatches
+  document.getElementById('body-swatches').addEventListener('click', e => {
+    const sw = e.target.closest('.swatch');
+    if (!sw) return;
+    document.querySelectorAll('#body-swatches .swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    bodyMat.color.set(sw.dataset.color);
+  });
+
+  // Wheel swatches
+  document.getElementById('wheel-swatches').addEventListener('click', e => {
+    const sw = e.target.closest('.swatch');
+    if (!sw) return;
+    document.querySelectorAll('#wheel-swatches .swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    wheelMat.color.set(sw.dataset.color);
+  });
+
+  // Sliders
+  function wireSlider(id, valId, cb) {
+    const input = document.getElementById(id);
+    const valEl = document.getElementById(valId);
+    input.addEventListener('input', () => {
+      const v = input.value / 100;
+      valEl.textContent = v.toFixed(2);
+      cb(v);
+    });
+  }
+  wireSlider('roughness',  'roughness-val',  v => { bodyMat.roughness = v; });
+  wireSlider('clearcoat',  'clearcoat-val',  v => { bodyMat.clearcoat = v; });
+  wireSlider('metalness',  'metalness-val',  v => { bodyMat.metalness = v; });
+
+  // Camera presets
+  document.getElementById('btn-front').addEventListener('click', () =>
+    lerpCamera(new THREE.Vector3(-6, 2, 0), new THREE.Vector3(0, 0.8, 0), 1.2)
+  );
+  document.getElementById('btn-side').addEventListener('click', () =>
+    lerpCamera(new THREE.Vector3(0, 2, 8), new THREE.Vector3(0, 0.8, 0), 1.2)
+  );
+  document.getElementById('btn-top').addEventListener('click', () =>
+    lerpCamera(new THREE.Vector3(0, 10, 1), new THREE.Vector3(0, 0, 0), 1.2)
+  );
+
+  // Auto rotate toggle
+  let autoRot = false;
+  const btnAutoRot = document.getElementById('btn-autorotate');
+  btnAutoRot.addEventListener('click', () => {
+    autoRot = !autoRot;
+    controls.autoRotate = autoRot;
+    btnAutoRot.classList.toggle('active', autoRot);
+  });
+
+  // Reset
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    lerpCamera(new THREE.Vector3(7, 3, 7), new THREE.Vector3(0, 0.8, 0), 1.0);
+  });
+
+  // Environment
+  const studioEnv = buildEnvStudio();
+  let nightEnv = null;
+  function buildNightEnv() {
+    // dark reddish studio
+    const s = new THREE.Scene();
+    s.background = new THREE.Color(0x080410);
+    const l = new THREE.AmbientLight(0x220022, 5);
+    s.add(l);
+    return pmremGenerator.fromScene(s).texture;
+  }
+
+  document.getElementById('env-studio').addEventListener('click', function () {
+    scene.environment = studioEnv;
+    scene.background = new THREE.Color(0x0d0d18);
+    scene.fog = new THREE.FogExp2(0x0d0d18, 0.04);
+    ambient.intensity = 0.8;
+    ambient.color.set(0x112244);
+    mainLight.intensity = 2.5;
+    document.getElementById('env-studio').classList.add('active');
+    document.getElementById('env-night').classList.remove('active');
+  });
+
+  document.getElementById('env-night').addEventListener('click', function () {
+    if (!nightEnv) nightEnv = buildNightEnv();
+    scene.environment = nightEnv;
+    scene.background = new THREE.Color(0x02020a);
+    scene.fog = new THREE.FogExp2(0x02020a, 0.05);
+    ambient.intensity = 0.2;
+    ambient.color.set(0x0a0520);
+    mainLight.intensity = 0.6;
+    document.getElementById('env-night').classList.add('active');
+    document.getElementById('env-studio').classList.remove('active');
+  });
+
+  // ────────────────────────────────────────────
+  //  Resize
+  // ────────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ── Dismiss loading screen ──
+  setTimeout(() => {
+    document.getElementById('loading').classList.add('hidden');
+  }, 800);
+
+  // ────────────────────────────────────────────
+  //  Animation loop
+  // ────────────────────────────────────────────
+  const clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    const elapsed = clock.getElapsedTime();
+
+    // Camera lerp
+    if (camTarget) {
+      camProgress = Math.min(1, camProgress + delta / camTarget.duration);
+      const t = 1 - Math.pow(1 - camProgress, 3); // ease-out-cubic
+      camera.position.lerpVectors(camFrom.pos, camTarget.pos, t);
+      controls.target.lerpVectors(camFrom.tgt, camTarget.tgt, t);
+      if (camProgress >= 1) camTarget = null;
+    }
+
+    // Rotate wheels while auto-rotate is on
+    const wheelSpeed = autoRot ? elapsed * 2.5 : 0;
+    wheelMeshes.forEach(w => { w.rotation.z = -wheelSpeed; });
+
+    // Drift grid
+    grid.position.x = (elapsed * 0.4) % 1;
+
+    // Animate dust particles
+    const pPos = particleGeo.attributes.position.array;
+    for (let i = 0; i < particleCount; i++) {
+      pPos[i*3+1] -= delta * 0.12;
+      if (pPos[i*3+1] < 0) pPos[i*3+1] = 8;
+    }
+    particleGeo.attributes.position.needsUpdate = true;
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  animate();
+}());
+</script>
+</body>
+</html>
